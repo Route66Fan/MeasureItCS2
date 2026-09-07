@@ -1,6 +1,8 @@
+Mod was ported over from CS1 to CS2 using Claude.AI
+
 # Measure It! for CS2
 
-A Cities: Skylines II port of the classic **Measure It!** mod for Cities: Skylines. Place a chain of points anywhere in your city — on the ground, on roads and bridges, inside tunnels, on building rooftops — and get live elevation, distance, slope, and direction readouts between them.
+A Cities: Skylines II port of the classic **Measure It!** mod for Cities: Skylines. Place a chain of points anywhere in your city — on the ground, on roads and bridges, inside tunnels & even underground pipes & power lines — and get live elevation, distance, slope, and direction readouts between them.
 
 ## Features
 
