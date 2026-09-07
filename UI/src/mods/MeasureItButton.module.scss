@@ -1,0 +1,15 @@
+// Matches the pattern confirmed working in bruceyboy24804/NodeController's
+// nodeControllerToggle.module.scss: Button renders `src` as a real <img>
+// element, so styling it directly via a plain `img` selector (not a mask)
+// is the correct approach - no background-color/mask-position tricks needed.
+.toggle {
+    img {
+        filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.25));
+    }
+}
+
+.selected {
+    img {
+        filter: drop-shadow(0 0 6px rgba(255, 217, 0, 0.5));
+    }
+}

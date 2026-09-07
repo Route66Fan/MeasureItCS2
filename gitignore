@@ -1,0 +1,15 @@
+# Visual Studio / .NET build output
+bin/
+obj/
+*.user
+.vs/
+
+# Node / webpack UI project
+UI/node_modules/
+UI/dist/
+UI/*.log
+
+# Editor/OS cruft
+.idea/
+*.DS_Store
+Thumbs.db

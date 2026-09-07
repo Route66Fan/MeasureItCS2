@@ -1,0 +1,207 @@
+// NOTE: this UI framework's root font-size is not the standard browser 16px -
+// its own design tokens use rem values like 12rem/72rem for things that are
+// clearly meant to be small (a panel border radius, a menu item size), which
+// only makes sense if 1rem here is a tiny fraction of a normal pixel. Our own
+// "21.5rem" width computed to almost nothing on screen because of this. Using
+// plain px everywhere below (at the scale we actually intended, ~16px per the
+// "rem" units this file used to have) sidesteps that mismatch entirely.
+
+.panel {
+    width: 420px;
+    pointer-events: auto;
+    font-size: 16px;
+}
+
+.hidden {
+    // display:none removed the element from layout entirely (zero size,
+    // unmeasurable), and Panel appeared to recalculate/re-snap its position
+    // whenever it transitioned from unmeasurable back to measurable - that
+    // caused a visible "flash to a different spot, then correct" on reopen.
+    // visibility:hidden was tried next to keep it continuously laid out, but
+    // this UI engine (Coherent/cohtml) doesn't seem to honor the CSS
+    // `visibility` property at all - the panel stayed visible regardless (we
+    // already found gaps in this engine's CSS support once before, with
+    // native HTML tables not rendering as a table layout). opacity is a much
+    // safer bet: it's about as universally supported as CSS properties get,
+    // and this framework's own transition/TransitionStyles system almost
+    // certainly animates opacity internally already, so it's clearly
+    // something this engine understands. Staying in-flow (not display:none)
+    // avoids the remeasure-and-snap flash, same as visibility:hidden intended.
+    opacity: 0;
+    pointer-events: none;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+}
+
+.unitsRow {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+}
+
+.unitDropdown {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 2px;
+}
+
+.dropdownToggleLabel {
+    // Originally added because "Cardinal point" (much longer than "Degrees"
+    // etc.) left a visible gap below the units row - the toggle's internal
+    // button appeared to wrap that longer text to a second line while itself
+    // staying a fixed height (clipping the wrapped line), but the surrounding
+    // flex column still sized itself to the pre-clip wrapped height, leaving
+    // invisible "phantom" space below. That option is now just "Cardinal"
+    // (short enough that this likely wouldn't trigger anymore), but the fix
+    // itself is harmless/still worth keeping as a defensive guard against any
+    // future long label wrapping the same way.
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.unitLabel {
+    font-size: 13px;
+    opacity: 0.85;
+}
+
+.optionsRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px 8px 12px;
+}
+
+.checkboxLabel {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.checkboxBox {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    margin-right: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+    background-color: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.checkboxBoxChecked {
+    background-color: rgba(0, 140, 220, 0.6);
+    border-color: #ffffff;
+}
+
+.checkmark {
+    font-size: 13px;
+    line-height: 1;
+    color: #ffffff;
+}
+
+.summaryGrid {
+    display: flex;
+    flex-direction: column;
+    padding: 0 12px 8px 12px;
+    gap: 2px;
+}
+
+.summaryRow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 16px;
+}
+
+.summaryLabel {
+    opacity: 0.85;
+}
+
+.summaryValue {
+    font-weight: 600;
+}
+
+.segmentTable {
+    margin: 0 12px 8px 12px;
+}
+
+.segmentRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 5px;
+    font-size: 14px;
+}
+
+.segmentHeaderRow {
+    opacity: 0.85;
+    font-weight: 600;
+}
+
+.colIndex {
+    flex: 0 0 20px;
+    text-align: left;
+}
+
+.colValue {
+    flex: 1 1 0;
+    text-align: right;
+}
+
+.segmentList {
+    max-height: 160px;
+}
+
+.actions {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    padding: 0 12px 8px 12px;
+}
+
+.dropdownList {
+    display: flex;
+    flex-direction: column;
+    min-width: 128px;
+}
+
+.dropdownOption {
+    text-align: left;
+    padding: 6px 10px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 15px;
+    cursor: pointer;
+
+    &:hover {
+        background-color: rgba(255, 255, 255, 0.08);
+    }
+}
+
+.dropdownOptionSelected {
+    font-weight: 600;
+    background-color: rgba(0, 140, 220, 0.25);
+}
+
+.hint {
+    padding: 0 12px 12px 12px;
+    font-size: 12px;
+    opacity: 0.7;
+}

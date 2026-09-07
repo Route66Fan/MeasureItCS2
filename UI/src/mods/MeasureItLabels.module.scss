@@ -1,0 +1,30 @@
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.label {
+    position: absolute;
+    // Points hand the raw screen x/y as the intended center, so shift back
+    // by half the label's own size to actually center it there.
+    transform: translate(-50%, -50%);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: rgba(20, 20, 20, 0.75);
+    font-weight: 700;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-width: 1px;
+    border-style: solid;
+    // color/border-color deliberately not set here - MeasureItLabels.tsx sets
+    // them inline per-element from the live "Point/Line Color" setting, so
+    // the number badges always match the line/circle color instead of being
+    // hardcoded to whatever the default happened to be.
+}
