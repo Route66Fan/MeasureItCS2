@@ -1,3 +1,5 @@
+Contains some code from the original Measure It! mod for CS1 that was originally written by keallu.
+
 MIT License
 
 Copyright (c) 2022 keallu
