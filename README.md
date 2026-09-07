@@ -1,5 +1,7 @@
 Built with assistance from Claude (Anthropic).
 
+Original mod can be found here: https://github.com/keallu/CSL-MeasureIt
+
 # Measure It! for CS2
 
 A Cities: Skylines II port of the classic **Measure It!** mod for Cities: Skylines. Place a chain of points anywhere in your city — on the ground, on roads and bridges, inside tunnels & even underground pipes & power lines — and get live elevation, distance, slope, and direction readouts between them.
@@ -39,7 +41,7 @@ This is a standard [CS2 modding toolchain](https://cs2.paradoxwikis.com/Modding_
 
 ## Credits
 
-- Original CS1 **Measure It!** mod concept.
+- Original CS1 **Measure It!** mod concept by keallu.
 - Ported to Cities: Skylines II's ECS/React architecture, with unit expansion (Kilometers, Miles), multi-point support, bridge/tunnel measurement, and a rebuilt React UI.
 
 ## License
