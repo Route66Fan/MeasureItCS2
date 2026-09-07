@@ -1,4 +1,4 @@
-Mod was ported over from CS1 to CS2 using Claude.AI
+Built with assistance from Claude (Anthropic).
 
 # Measure It! for CS2
 
