@@ -12,6 +12,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using GameMode = Game.GameMode;
 
 namespace MeasureItCS2.Systems
 {
@@ -147,7 +148,16 @@ namespace MeasureItCS2.Systems
             // (whose requireUnderground is false), that same job naturally sets
             // undergroundOn back to false on its own - no explicit handling needed in
             // OnStopRunning().
-            requireUnderground = true;
+            //
+            // Only done in-game. In the editor this tool should behave like any other
+            // editor tool and leave Underground View alone - forcing it on there would
+            // be an unrequested side effect, and it's not something that's been
+            // verified to make sense in the editor's views. ToolSystem.actionMode is
+            // just the GameMode (Game/Editor) set when the scene loads (confirmed via
+            // IL). Assigned explicitly either way (rather than only set to true in
+            // game mode) so a stale value can never carry over if the same system
+            // instance gets reused after switching between game and editor.
+            requireUnderground = (m_ToolSystem.actionMode & GameMode.Game) != 0;
         }
 
         protected override void OnStopRunning()

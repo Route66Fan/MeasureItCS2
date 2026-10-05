@@ -45,6 +45,7 @@ namespace MeasureItCS2.Systems
         private MeasureToolSystem m_MeasureToolSystem;
         private ToolSystem m_ToolSystem;
         private DefaultToolSystem m_DefaultToolSystem;
+        private Game.Rendering.CameraUpdateSystem m_CameraUpdateSystem;
 
         // Bound to the custom keybinds declared in Setting.cs (ToggleToolBinding /
         // UndoLastPointBinding). Confirmed via ModSetting's own decompiled
@@ -77,6 +78,7 @@ namespace MeasureItCS2.Systems
             m_MeasureToolSystem = World.GetOrCreateSystemManaged<MeasureToolSystem>();
             m_ToolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             m_DefaultToolSystem = World.GetOrCreateSystemManaged<DefaultToolSystem>();
+            m_CameraUpdateSystem = World.GetOrCreateSystemManaged<Game.Rendering.CameraUpdateSystem>();
 
             m_ToggleToolAction = InputManager.instance.FindAction(Mod.Settings.id, nameof(Setting.ToggleToolBinding));
             m_UndoLastPointAction = InputManager.instance.FindAction(Mod.Settings.id, nameof(Setting.UndoLastPointBinding));
@@ -195,24 +197,29 @@ namespace MeasureItCS2.Systems
             // IL), no text-drawing method, so labels have to be plain HTML
             // positioned over the game view rather than drawn in the 3D overlay.
             //
-            // NOTE: uses UnityEngine.Camera.main directly rather than going through
-            // Game.Rendering.CameraUpdateSystem - this is the simplest approach and
-            // should work since CS2 is a standard Unity project, but if Camera.main
-            // doesn't resolve to the actual game camera in this SDK version (e.g. if
-            // it isn't tagged "MainCamera"), labels will be positioned wrong or not
-            // appear at all - worth flagging if that happens so this can be swapped
-            // for whatever CameraUpdateSystem actually exposes.
+            // Prefers the camera the game itself treats as active:
+            // CameraUpdateSystem.activeCamera is activeViewer?.camera (confirmed via
+            // IL) - the same source the tool raycast uses, so it follows the right
+            // camera in both the game and the editor, whereas Camera.main depends on
+            // which camera happens to carry the "MainCamera" tag in each mode. Falls
+            // back to Camera.main (what this used exclusively before, known to work
+            // in-game) when there's no active viewer yet.
             var pointLabelsBuilder = new StringBuilder();
             pointLabelsBuilder.Append('[');
 
-            Camera mainCamera = Camera.main;
-            if (mainCamera != null)
+            Camera projectionCamera = m_CameraUpdateSystem.activeCamera;
+            if (projectionCamera == null)
+            {
+                projectionCamera = Camera.main;
+            }
+
+            if (projectionCamera != null)
             {
                 bool firstLabel = true;
 
                 for (int i = 0; i < points.Count; i++)
                 {
-                    Vector3 screenPoint = mainCamera.WorldToScreenPoint(new Vector3(points[i].x, points[i].y, points[i].z));
+                    Vector3 screenPoint = projectionCamera.WorldToScreenPoint(new Vector3(points[i].x, points[i].y, points[i].z));
 
                     // WorldToScreenPoint's Y is bottom-up (Unity convention) and its Z
                     // is distance in front of the camera (negative/zero = behind).
