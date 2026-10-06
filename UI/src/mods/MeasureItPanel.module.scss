@@ -6,6 +6,25 @@
 // plain px everywhere below (at the scale we actually intended, ~16px per the
 // "rem" units this file used to have) sidesteps that mismatch entirely.
 
+// The window is moved by MeasureItPanel.tsx itself rather than by the game's own
+// draggable Panel (which can't report or restore a position), so it can be
+// remembered. This fixed-position container is what actually gets moved.
+.anchor {
+    position: fixed;
+    // The container itself must never swallow mouse input - only the Panel inside
+    // it should (.panel turns it back on). Otherwise a hidden panel (opacity 0)
+    // would still leave an invisible, clickable rectangle over the game world.
+    pointer-events: none;
+}
+
+// Where it sits until it has been dragged for the first time (or after Options ->
+// Reset Panel Position).
+.anchorDefault {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
 .panel {
     width: 420px;
     pointer-events: auto;
@@ -34,7 +53,12 @@
 .header {
     display: flex;
     align-items: center;
+    justify-content: center;
+    // Fill the whole title strip, not just the text - this is the drag handle.
+    width: 100%;
+    align-self: stretch;
     font-weight: 600;
+    cursor: move;
 }
 
 .unitsRow {
@@ -165,6 +189,13 @@
 }
 
 .segmentList {
+    // Fixed height (min = max), not just a cap: the window is a centered Panel, so
+    // any change in its height moves its top edge. Reserving the same list area
+    // whether there are 0 or 50 segments keeps the whole window one constant size.
+    // Change this one number to make the reserved area (and the scroll cap) larger
+    // or smaller.
+    height: 160px;
+    min-height: 160px;
     max-height: 160px;
 }
 

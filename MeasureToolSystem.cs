@@ -160,6 +160,31 @@ namespace MeasureItCS2.Systems
             requireUnderground = (m_ToolSystem.actionMode & GameMode.Game) != 0;
         }
 
+        /// <summary>
+        /// Clears the measurement chain whenever the game starts loading a new scene -
+        /// loading a city, loading the editor, or going back to the main menu. This
+        /// system lives for the whole play session (it's created once, not per scene),
+        /// so without this the points placed in one city or editor session were still
+        /// sitting in the list when the next one loaded: they'd reappear on toggling
+        /// the tool, even though they're coordinates from a completely different map.
+        ///
+        /// GameSystemBase.OnCreate subscribes every system to
+        /// GameManager.onGamePreload regardless of whether the system is enabled
+        /// (confirmed via IL), so this still fires while the tool is switched off.
+        /// Per-session cursor/snap state is reset too: m_CursorNodeEntity and the
+        /// stored point entities refer to the previous scene's entities.
+        /// </summary>
+        protected override void OnGamePreload(Colossal.Serialization.Entities.Purpose purpose, GameMode mode)
+        {
+            base.OnGamePreload(purpose, mode);
+
+            ClearPoints();
+            m_HasCursorPosition = false;
+            m_CursorNodeEntity = Entity.Null;
+            m_NearbyNodePositions.Clear();
+            m_PreviewPathScratch.Clear();
+        }
+
         protected override void OnStopRunning()
         {
             applyAction.shouldBeEnabled = false;

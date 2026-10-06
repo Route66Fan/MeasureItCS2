@@ -6,6 +6,7 @@ using Game.Tools;
 using Game.UI;
 using Unity.Mathematics;
 using UnityEngine;
+using GameMode = Game.GameMode;
 
 namespace MeasureItCS2.Systems
 {
@@ -66,7 +67,9 @@ namespace MeasureItCS2.Systems
         private ValueBinding<int> m_UnitOfDirection;
         private ValueBinding<string> m_SegmentsJson;
         private ValueBinding<string> m_SummaryJson;
-        private ValueBinding<int> m_ResetPanelPositionCounter;
+        private ValueBinding<bool> m_PanelPlaced;
+        private ValueBinding<float> m_PanelX;
+        private ValueBinding<float> m_PanelY;
         private ValueBinding<string> m_PointLabelsJson;
         private ValueBinding<string> m_PointColorHex;
         private ValueBinding<bool> m_SnapToNodes;
@@ -93,7 +96,9 @@ namespace MeasureItCS2.Systems
             AddBinding(m_UnitOfDirection = new ValueBinding<int>(Group, "unitOfDirection", (int)Mod.Settings.UnitOfDirection));
             AddBinding(m_SegmentsJson = new ValueBinding<string>(Group, "segmentsJson", "[]"));
             AddBinding(m_SummaryJson = new ValueBinding<string>(Group, "summaryJson", EmptySummaryJson()));
-            AddBinding(m_ResetPanelPositionCounter = new ValueBinding<int>(Group, "resetPanelPositionCounter", 0));
+            AddBinding(m_PanelPlaced = new ValueBinding<bool>(Group, "panelPlaced", false));
+            AddBinding(m_PanelX = new ValueBinding<float>(Group, "panelX", 0f));
+            AddBinding(m_PanelY = new ValueBinding<float>(Group, "panelY", 0f));
             AddBinding(m_PointLabelsJson = new ValueBinding<string>(Group, "pointLabelsJson", "[]"));
             AddBinding(m_PointColorHex = new ValueBinding<string>(Group, "pointColorHex", MeasureMath.ColorHex(Mod.Settings.MeasureColor)));
             AddBinding(m_SnapToNodes = new ValueBinding<bool>(Group, "snapToNodes", Mod.Settings.SnapToNodes));
@@ -122,6 +127,34 @@ namespace MeasureItCS2.Systems
                 Mod.Settings.SnapToNodes = value;
                 Mod.Settings.ApplyAndSave();
             }));
+            AddBinding(new TriggerBinding<float, float>(Group, "setPanelPosition", (x, y) =>
+            {
+                // Sent by the panel when a drag ends: its top-left corner as fractions
+                // of the screen. Saved into the slot for whichever screen (city or
+                // editor) is loaded right now, so each remembers its own spot.
+                if (float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(y) || float.IsInfinity(y))
+                {
+                    return;
+                }
+
+                x = math.clamp(x, 0f, 1f);
+                y = math.clamp(y, 0f, 1f);
+
+                if (IsEditorMode())
+                {
+                    Mod.Settings.EditorPanelPlaced = true;
+                    Mod.Settings.EditorPanelX = x;
+                    Mod.Settings.EditorPanelY = y;
+                }
+                else
+                {
+                    Mod.Settings.CityPanelPlaced = true;
+                    Mod.Settings.CityPanelX = x;
+                    Mod.Settings.CityPanelY = y;
+                }
+
+                Mod.Settings.ApplyAndSave();
+            }));
         }
 
         private void ToggleTool()
@@ -141,6 +174,16 @@ namespace MeasureItCS2.Systems
             {
                 m_ToolSystem.activeTool = m_MeasureToolSystem;
             }
+        }
+
+        /// <summary>
+        /// True while the editor (rather than a city) is the loaded scene.
+        /// ToolSystem.actionMode is simply the Game.GameMode the current scene was
+        /// loaded in (confirmed via IL), so it tells city from editor.
+        /// </summary>
+        private bool IsEditorMode()
+        {
+            return (m_ToolSystem.actionMode & GameMode.Editor) != 0;
         }
 
         protected override void OnUpdate()
@@ -175,13 +218,25 @@ namespace MeasureItCS2.Systems
 
             if (s_ResetPanelPositionRequested)
             {
-                // A plain bool binding can only ever be observed going false->true
-                // once - a second button press with no state change in between
-                // wouldn't fire a React update at all. An incrementing counter is
-                // guaranteed to differ every time, so each press is always observable.
-                m_ResetPanelPositionCounter.Update(m_ResetPanelPositionCounter.value + 1);
+                // "Reset Panel Position": forget the remembered spot on BOTH screens.
+                // The window then falls back to its default, centered position as
+                // soon as the cleared flags reach it through the bindings below - no
+                // remount trick needed, since its position now comes from these
+                // settings rather than from the game's own Panel internals.
+                Mod.Settings.CityPanelPlaced = false;
+                Mod.Settings.EditorPanelPlaced = false;
+                Mod.Settings.ApplyAndSave();
                 s_ResetPanelPositionRequested = false;
             }
+
+            // Publish the remembered position for whichever screen is loaded now, so
+            // the window follows the right slot when you move between a city and the
+            // editor. Updated before the inactive early-out below on purpose, so it's
+            // already correct by the time the tool is toggled on.
+            bool editorMode = IsEditorMode();
+            m_PanelPlaced.Update(editorMode ? Mod.Settings.EditorPanelPlaced : Mod.Settings.CityPanelPlaced);
+            m_PanelX.Update(editorMode ? Mod.Settings.EditorPanelX : Mod.Settings.CityPanelX);
+            m_PanelY.Update(editorMode ? Mod.Settings.EditorPanelY : Mod.Settings.CityPanelY);
 
             if (!active)
             {
@@ -219,7 +274,12 @@ namespace MeasureItCS2.Systems
 
                 for (int i = 0; i < points.Count; i++)
                 {
-                    Vector3 screenPoint = projectionCamera.WorldToScreenPoint(new Vector3(points[i].x, points[i].y, points[i].z));
+                    // Fully qualified on purpose: if anything in the project also imports
+                    // System.Numerics (an editor "add using" quick fix can add that line
+                    // without anyone noticing), a bare Vector3 becomes ambiguous between
+                    // System.Numerics.Vector3 and UnityEngine.Vector3 and the build fails
+                    // with CS0104. Spelling out the Unity type can't be ambiguous.
+                    UnityEngine.Vector3 screenPoint = projectionCamera.WorldToScreenPoint(new UnityEngine.Vector3(points[i].x, points[i].y, points[i].z));
 
                     // WorldToScreenPoint's Y is bottom-up (Unity convention) and its Z
                     // is distance in front of the camera (negative/zero = behind).

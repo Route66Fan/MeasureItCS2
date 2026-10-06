@@ -57,6 +57,33 @@ namespace MeasureItCS2
         [SettingsUIHidden]
         public bool SnapToNodes { get; set; }
 
+        // Where the readout window was last dragged to, remembered separately for the
+        // in-game (city) screen and the editor, since the two screens lay out their
+        // own UI differently. Stored as fractions (0..1) of the screen's width and
+        // height rather than pixels, so a saved position survives a change of
+        // resolution or UI scale. The "Placed" flags tell "never moved" (use the
+        // default, centered spot) apart from a real position - 0,0 is a legitimate
+        // spot - and a bool also defaults to false for anyone whose saved settings
+        // predate these properties. Hidden from Options: the window itself is the UI
+        // for these (drag it); Options -> Reset Panel Position clears them.
+        [SettingsUIHidden]
+        public bool CityPanelPlaced { get; set; }
+
+        [SettingsUIHidden]
+        public float CityPanelX { get; set; }
+
+        [SettingsUIHidden]
+        public float CityPanelY { get; set; }
+
+        [SettingsUIHidden]
+        public bool EditorPanelPlaced { get; set; }
+
+        [SettingsUIHidden]
+        public float EditorPanelX { get; set; }
+
+        [SettingsUIHidden]
+        public float EditorPanelY { get; set; }
+
         [SettingsUIButton]
         [SettingsUISection(GroupPanel)]
         public bool ResetPanelPosition
@@ -86,6 +113,12 @@ namespace MeasureItCS2
             UnitOfDirection = DirectionUnit.Point;
             MeasureColor = MeasureColorOption.Yellow;
             SnapToNodes = true;
+            CityPanelPlaced = false;
+            CityPanelX = 0f;
+            CityPanelY = 0f;
+            EditorPanelPlaced = false;
+            EditorPanelX = 0f;
+            EditorPanelY = 0f;
         }
 
         public DropdownItem<int>[] GetMeasureColorItems()

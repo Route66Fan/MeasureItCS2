@@ -1,6 +1,7 @@
 import { bindValue, trigger, useValue } from "cs2/api";
 import { Panel, Scrollable, Button, Dropdown, DropdownToggle } from "cs2/ui";
 import { useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import styles from "./MeasureItPanel.module.scss";
 
 const GROUP = "measureItCS2";
@@ -10,7 +11,9 @@ const toolActive$ = bindValue<boolean>(GROUP, "toolActive", false);
 const unitOfDistance$ = bindValue<number>(GROUP, "unitOfDistance", 0);
 const unitOfSlope$ = bindValue<number>(GROUP, "unitOfSlope", 1);
 const unitOfDirection$ = bindValue<number>(GROUP, "unitOfDirection", 1);
-const resetPanelPositionCounter$ = bindValue<number>(GROUP, "resetPanelPositionCounter", 0);
+const panelPlaced$ = bindValue<boolean>(GROUP, "panelPlaced", false);
+const panelX$ = bindValue<number>(GROUP, "panelX", 0);
+const panelY$ = bindValue<number>(GROUP, "panelY", 0);
 const snapToNodes$ = bindValue<boolean>(GROUP, "snapToNodes", true);
 
 export interface MeasurementRow {
@@ -76,6 +79,29 @@ function safeParse<T>(json: string, fallback: T): T {
     }
 }
 
+// Width of the window (keep in sync with .panel in the stylesheet) and how much of
+// its height must stay on screen when a saved position is clamped to the current
+// screen size - so a position saved at one resolution can never leave the window
+// unreachable after a change of resolution or UI scale.
+const PANEL_WIDTH = 420;
+const MIN_VISIBLE_HEIGHT = 120;
+
+/** A window position in screen pixels (its top-left corner). */
+interface PanelSpot {
+    left: number;
+    top: number;
+}
+
+/** The same position as fractions (0..1) of the screen - what gets saved. */
+interface PanelFraction {
+    x: number;
+    y: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
 /** Draggable measurement readout panel - replaces the CS1 UIPanel/UIDragHandle
  * "info panel" that ModManager.cs built by hand with 7 rows of UILabels. */
 export function MeasureItPanel() {
@@ -85,101 +111,202 @@ export function MeasureItPanel() {
     const unitOfDirection = useValue(unitOfDirection$);
     const segmentsJson = useValue(segmentsJson$);
     const summaryJson = useValue(summaryJson$);
-    const resetPanelPositionCounter = useValue(resetPanelPositionCounter$);
+    const panelPlaced = useValue(panelPlaced$);
+    const panelX = useValue(panelX$);
+    const panelY = useValue(panelY$);
     const snapToNodes = useValue(snapToNodes$);
 
     // Parsed once per render from the JSON strings the C# side sends.
     const segments: MeasurementRow[] = safeParse(segmentsJson, []);
     const summary: MeasurementSummary = safeParse(summaryJson, DEFAULT_SUMMARY);
 
-    // Deliberately never unmount the panel (no early "return null" here). The
-    // Panel component's draggable position is tracked internally with no public
-    // callback to read it back out (DraggablePanelProps only exposes
-    // initialPosition, used once on first mount - confirmed in types/ui.d.ts).
-    // If we unmount/remount on every tool toggle, that internal position resets
-    // each time. Hiding via CSS instead keeps the component instance alive, so
-    // wherever the user last dragged it to is preserved across toggles.
+    // Deliberately never unmount the panel (no early "return null" here): hiding it
+    // with CSS keeps the component instance alive across tool toggles, and avoids
+    // the layout "flash" a remount used to cause.
     const visible = toolActive;
 
-    // "Reset Panel Position" (Options page button) works by deliberately forcing
-    // a remount instead - since there's no way to imperatively move an
-    // already-mounted Panel, changing its `key` is what makes React tear down
-    // the old instance and mount a fresh one, which drops the previous drag
-    // position and falls back to the framework's own default placement.
-    // resetPanelPositionCounter increments by 1 in C# every time the button is
-    // pressed - it's a counter rather than a bool specifically so a *second*
-    // press is still observable (a bool stuck at `true` wouldn't change again).
-    const [panelKey, setPanelKey] = useState(0);
-    const lastResetCounter = useRef(resetPanelPositionCounter);
+    // ---- Window position --------------------------------------------------
+    // This component positions the window itself instead of using the game's own
+    // draggable Panel. That Panel only accepts an initialPosition on first mount
+    // and never reports where it ended up (confirmed in types/ui.d.ts), so a
+    // position could neither be saved nor restored with it. So the Panel is used as
+    // plain (non-draggable) chrome inside a position:fixed container that is moved
+    // from the title bar here. The spot is saved on the C# side - separately for
+    // the city and the editor - as fractions of the screen, and comes back through
+    // the panelPlaced / panelX / panelY bindings.
+    const anchorRef = useRef<HTMLDivElement>(null);
+    const [dragSpot, setDragSpot] = useState<PanelSpot | null>(null);
+    const [pendingSpot, setPendingSpot] = useState<PanelFraction | null>(null);
+    const stopDragRef = useRef<(() => void) | null>(null);
+
+    // After a drop, keep showing the dropped position until the saved one has made
+    // the round trip through C# and back via the bindings - otherwise the window
+    // would flick back to its old spot for a frame or two. A timeout guarantees it
+    // can never stay stuck overriding the saved position.
     useEffect(() => {
-        if (resetPanelPositionCounter !== lastResetCounter.current) {
-            lastResetCounter.current = resetPanelPositionCounter;
-            setPanelKey((key) => key + 1);
+        if (!pendingSpot) {
+            return undefined;
         }
-    }, [resetPanelPositionCounter]);
+
+        const arrived = Math.abs(panelX - pendingSpot.x) < 0.0005 && Math.abs(panelY - pendingSpot.y) < 0.0005;
+        if (arrived) {
+            setPendingSpot(null);
+            return undefined;
+        }
+
+        const timeout = setTimeout(() => setPendingSpot(null), 2000);
+        return () => clearTimeout(timeout);
+    }, [panelX, panelY, pendingSpot]);
+
+    // If the panel unmounts mid-drag (e.g. a scene change), detach the listeners.
+    useEffect(() => () => stopDragRef.current?.(), []);
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const spotFromFraction = (x: number, y: number): PanelSpot => ({
+        left: clamp(x * viewportWidth, 0, viewportWidth - PANEL_WIDTH),
+        top: clamp(y * viewportHeight, 0, viewportHeight - MIN_VISIBLE_HEIGHT),
+    });
+
+    // null = never moved: the stylesheet's default (centered) placement applies.
+    let spot: PanelSpot | null = null;
+    if (dragSpot) {
+        spot = dragSpot;
+    } else if (pendingSpot) {
+        spot = spotFromFraction(pendingSpot.x, pendingSpot.y);
+    } else if (panelPlaced) {
+        spot = spotFromFraction(panelX, panelY);
+    }
+
+    const onHeaderMouseDown = (event: ReactMouseEvent) => {
+        const anchor = anchorRef.current;
+        if (event.button !== 0 || !anchor) {
+            return;
+        }
+        event.preventDefault();
+
+        // Measured at the start of the drag, so this also works from the default
+        // (centered) placement, whose pixel position isn't known up front.
+        const rect = anchor.getBoundingClientRect();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const clampSpot = (left: number, top: number): PanelSpot => ({
+            left: clamp(left, 0, window.innerWidth - rect.width),
+            top: clamp(top, 0, window.innerHeight - rect.height),
+        });
+
+        let last = clampSpot(rect.left, rect.top);
+        let moved = false;
+        setDragSpot(last);
+
+        const onMove = (move: MouseEvent) => {
+            const dx = move.clientX - startX;
+            const dy = move.clientY - startY;
+            if (!moved && Math.abs(dx) + Math.abs(dy) > 2) {
+                moved = true;
+            }
+            last = clampSpot(rect.left + dx, rect.top + dy);
+            setDragSpot(last);
+        };
+
+        const stop = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            stopDragRef.current = null;
+        };
+
+        const onUp = () => {
+            stop();
+            setDragSpot(null);
+
+            // A plain click on the title bar isn't a move - don't save anything.
+            if (!moved) {
+                return;
+            }
+
+            const fraction: PanelFraction = {
+                x: last.left / window.innerWidth,
+                y: last.top / window.innerHeight,
+            };
+            setPendingSpot(fraction);
+            trigger(GROUP, "setPanelPosition", fraction.x, fraction.y);
+        };
+
+        stopDragRef.current = stop;
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+    };
 
     return (
-        <Panel
-            key={panelKey}
-            className={`${styles.panel} ${visible ? "" : styles.hidden}`}
-            header={
-                <div className={styles.header}>
-                    <span>Measure It! for CS2</span>
-                </div>
-            }
-            draggable
-            transition={null}
-            transitionSounds={null}
+        <div
+            ref={anchorRef}
+            className={`${styles.anchor} ${spot ? "" : styles.anchorDefault}`}
+            style={spot ? { left: `${spot.left}px`, top: `${spot.top}px` } : undefined}
         >
-            <div className={styles.unitsRow}>
-                <UnitDropdown
-                    label="Distance"
-                    value={unitOfDistance}
-                    options={DISTANCE_UNITS}
-                    onChange={(value) => trigger(GROUP, "setUnitOfDistance", value)}
-                    active={toolActive}
-                />
-                <UnitDropdown
-                    label="Slope"
-                    value={unitOfSlope}
-                    options={SLOPE_UNITS}
-                    onChange={(value) => trigger(GROUP, "setUnitOfSlope", value)}
-                    active={toolActive}
-                />
-                <UnitDropdown
-                    label="Direction"
-                    value={unitOfDirection}
-                    options={DIRECTION_UNITS}
-                    onChange={(value) => trigger(GROUP, "setUnitOfDirection", value)}
-                    active={toolActive}
-                />
-            </div>
+            <Panel
+                className={`${styles.panel} ${visible ? "" : styles.hidden}`}
+                header={
+                    <div className={styles.header} onMouseDown={onHeaderMouseDown}>
+                        <span>Measure It! for CS2</span>
+                    </div>
+                }
+                transition={null}
+                transitionSounds={null}
+            >
+                <div className={styles.unitsRow}>
+                    <UnitDropdown
+                        label="Distance"
+                        value={unitOfDistance}
+                        options={DISTANCE_UNITS}
+                        onChange={(value) => trigger(GROUP, "setUnitOfDistance", value)}
+                        active={toolActive}
+                    />
+                    <UnitDropdown
+                        label="Slope"
+                        value={unitOfSlope}
+                        options={SLOPE_UNITS}
+                        onChange={(value) => trigger(GROUP, "setUnitOfSlope", value)}
+                        active={toolActive}
+                    />
+                    <UnitDropdown
+                        label="Direction"
+                        value={unitOfDirection}
+                        options={DIRECTION_UNITS}
+                        onChange={(value) => trigger(GROUP, "setUnitOfDirection", value)}
+                        active={toolActive}
+                    />
+                </div>
 
-            <div className={styles.optionsRow}>
-                <Checkbox
-                    checked={snapToNodes}
-                    onChange={(checked) => trigger(GROUP, "setSnapToNodes", checked)}
-                    label="Snap to nodes"
-                />
-            </div>
+                <div className={styles.optionsRow}>
+                    <Checkbox
+                        checked={snapToNodes}
+                        onChange={(checked) => trigger(GROUP, "setSnapToNodes", checked)}
+                        label="Snap to nodes"
+                    />
+                </div>
 
-            <div className={styles.summaryGrid}>
-                <SummaryRow label={`Elevation (${summary.distanceUnitSymbol})`} value={summary.elevation} />
-                <SummaryRow
-                    label={`Total distance (${summary.distanceUnitSymbol})`}
-                    value={summary.totalDistance}
-                    tooltip="Sum of the true 3D distance of every segment."
-                />
-                {summary.pointCount > 1 && (
+                <div className={styles.summaryGrid}>
+                    <SummaryRow label={`Elevation (${summary.distanceUnitSymbol})`} value={summary.elevation} />
+                    <SummaryRow
+                        label={`Total distance (${summary.distanceUnitSymbol})`}
+                        value={summary.totalDistance}
+                        tooltip="Sum of the true 3D distance of every segment."
+                    />
+                    {/* Always rendered (it just reads 0 until there are 2+ points) - see the
+                        note above the segment table: the window's height has to stay constant. */}
                     <SummaryRow
                         label={`Straight line (${summary.distanceUnitSymbol})`}
                         value={summary.straightLineDistance}
                         tooltip="Direct distance from the first point to the last point."
                     />
-                )}
-            </div>
+                </div>
 
-            {segments.length > 0 && (
+                {/* The segment table is always rendered, at a fixed height, even with no
+                    points. This window is a centered Panel, so its top edge moves whenever
+                    its height changes: rows appearing/disappearing (or a new session
+                    starting with an empty chain) made it jump up or down. Keeping the
+                    size constant means it can't move. The cost is a blank table area
+                    before the first segment - the list height is set in the stylesheet. */}
                 <div className={styles.segmentTable}>
                     <div className={`${styles.segmentRow} ${styles.segmentHeaderRow}`}>
                         <span className={styles.colIndex}>#</span>
@@ -200,16 +327,16 @@ export function MeasureItPanel() {
                         ))}
                     </Scrollable>
                 </div>
-            )}
 
-            <div className={styles.actions}>
-                <Button variant="flat" onSelect={() => trigger(GROUP, "clearPoints")}>
-                    Clear all
-                </Button>
-            </div>
+                <div className={styles.actions}>
+                    <Button variant="flat" onSelect={() => trigger(GROUP, "clearPoints")}>
+                        Clear all
+                    </Button>
+                </div>
 
-            <div className={styles.hint}>Left-click: add point &nbsp;|&nbsp; Right-click: undo last point</div>
-        </Panel>
+                <div className={styles.hint}>Left-click: add point &nbsp;|&nbsp; Right-click: undo last point</div>
+            </Panel>
+        </div>
     );
 }
 
