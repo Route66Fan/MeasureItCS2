@@ -13,7 +13,7 @@ A Cities: Skylines II port of the classic Measure It! mod for Cities: Skylines. 
    * Distance: Meters, Kilometers, Feet, Miles
    * Slope: Percentage, Degrees
    * Direction: Degrees, Cardinal (N/NE/E/...)
-* **Live readout panel** — draggable, keeps its position when you toggle the tool off and on, shows per-segment distance/relief/slope/direction plus running totals (total distance, straight-line distance, elevation).
+* **Live readout panel** — draggable by its title bar, remembers where you put it (separately for cities and the editor, and between game sessions), shows per-segment distance/relief/slope/direction plus running totals (total distance, straight-line distance, elevation).
 * **Customizable point/line color** (Yellow, Magenta, Red, Green, Cyan, White, Orange).
 * **Numbered point markers** on the map, matching the segment table's own numbering.
 * Works on elevated bridges and underground tunnels, not just flat ground.
@@ -46,9 +46,11 @@ This is a standard [CS2 modding toolchain](https://cs2.paradoxwikis.com/Modding_
 
 ## Changelog
 
-### v1.01
+### v1.1
 
 * Added support for the Cities: Skylines II editor (toggle the tool with `Ctrl+M`).
+* Measurement points are now cleared when you load a city, load the editor, or return to the main menu, instead of carrying over.
+* The mod window now remembers its position, separately for cities and the editor. Options → Reset Panel Position puts it back in the center.
 * Point numbers now follow the game's active camera.
 
 ### v1.0
